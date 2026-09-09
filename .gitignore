@@ -1,0 +1,13 @@
+node_modules/
+dist/
+out/
+*.log
+.DS_Store
+
+# Dados locais (nunca subir)
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+backup-ponto-*.json

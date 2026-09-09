@@ -1,0 +1,53 @@
+{
+  "name": "vencehoje-ponto",
+  "version": "1.0.0",
+  "description": "Aplicativo de marcação de ponto pessoal",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "css:build": "tailwindcss -i styles/input.css -o styles/styles.css --minify",
+    "css:watch": "tailwindcss -i styles/input.css -o styles/styles.css --watch",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build": "npm run css:build && electron-builder --win",
+    "build:portable": "npm run css:build && electron-builder --win portable"
+  },
+  "author": "vencehoje",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^12.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/cli": "^4.3.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "eslint": "^10.10.0",
+    "globals": "^17.12.0",
+    "prettier": "^3.9.6",
+    "tailwindcss": "^4.3.3"
+  },
+  "build": {
+    "appId": "com.vencehoje.ponto",
+    "productName": "VenceHoje Ponto",
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "runAtStartup": true
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "styles/**/*",
+      "assets/**/*"
+    ]
+  }
+}
