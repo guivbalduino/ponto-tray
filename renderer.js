@@ -742,6 +742,16 @@
       loadPonto();
     });
 
+    document.addEventListener('keydown', (e) => {
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+      if (e.key === 'ArrowLeft') {
+        navigateDay(-1);
+      } else if (e.key === 'ArrowRight') {
+        navigateDay(1);
+      }
+    });
+
     els.btnMinimize.addEventListener('click', () => api.minimizeWindow());
     els.btnClose.addEventListener('click', () => api.closeWindow());
 

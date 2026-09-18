@@ -152,8 +152,7 @@ function StartApp() {
       }
 
       if (preferencia === 'fechar') {
-        app.isQuitting = true;
-        app.quit();
+        quitApp();
         return;
       }
       if (preferencia === 'minimizar') {
@@ -180,8 +179,7 @@ function StartApp() {
       }
 
       if (resultado.response === 0) {
-        app.isQuitting = true;
-        app.quit();
+        quitApp();
       } else {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.hide();
@@ -208,6 +206,12 @@ function StartApp() {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.close();
     }
+  }
+
+  function quitApp() {
+    app.isQuitting = true;
+    closeDatabase();
+    app.exit(0);
   }
 
   function showWindow() {
@@ -253,8 +257,7 @@ function StartApp() {
       {
         label: 'Sair',
         click: () => {
-          app.isQuitting = true;
-          app.quit();
+          quitApp();
         },
       },
     ]);
