@@ -26,6 +26,9 @@
     totalAlmoco: $('#totalAlmoco'),
     periodoManha: $('#periodoManha'),
     periodoTarde: $('#periodoTarde'),
+    saldoAcumulado: $('#saldoAcumulado'),
+    saldoAcumuladoLabel: $('#saldoAcumuladoLabel'),
+    saldoAcumuladoDias: $('#saldoAcumuladoDias'),
     jornadaDiaria: $('#jornadaDiaria'),
     observacao: $('#observacao'),
     mesSelect: $('#mesSelect'),
@@ -249,6 +252,8 @@
     } else {
       els.periodoTarde.textContent = '--:-- a --:--';
     }
+
+    loadSaldoAcumulado();
   }
 
   function populateMonthSelect(selected) {
@@ -415,6 +420,74 @@
           (e && e.message ? e.message : String(e)) +
           '</div>';
       console.error('loadMonthSummary error:', e);
+    }
+  }
+
+  async function loadSaldoAcumulado() {
+    if (!api || !api.getAllPontosMes || !api.getFeriado) return;
+    try {
+      const alvo = new Date(currentDate + 'T12:00:00');
+      const ym = currentDate.slice(0, 7);
+      const [y, mo] = ym.split('-').map(Number);
+
+      let inicio = new Date(y, mo - 1, 1, 12, 0, 0);
+      const dataInicio = els.configDataInicio ? els.configDataInicio.value : '';
+      if (dataInicio) {
+        const ini = new Date(dataInicio + 'T12:00:00');
+        if (ini > inicio) inicio.setTime(ini.getTime());
+      }
+
+      const datas = [];
+      for (let d = new Date(inicio.getTime()); d <= alvo; d.setDate(d.getDate() + 1)) {
+        const ds = toLocalDateStr(d);
+        if (!dateIsWeekday(ds)) continue;
+        datas.push(ds);
+      }
+
+      const feriados = await Promise.all(datas.map((ds) => api.getFeriado(ds)));
+      const feriadoSet = new Set();
+      feriados.forEach((f, i) => {
+        if (f) feriadoSet.add(datas[i]);
+      });
+
+      const porData = {};
+      if (datas.length > 0) {
+        const meses = new Set(datas.map((ds) => ds.slice(0, 7)));
+        for (const m of meses) {
+          const pts = await api.getAllPontosMes(m);
+          for (const p of pts) porData[p.data] = p;
+        }
+      }
+
+      const jornada = parseJornada();
+      let saldo = 0;
+      let diasUteis = 0;
+      for (const ds of datas) {
+        if (feriadoSet.has(ds)) continue;
+        const p = porData[ds];
+        if (p) {
+          saldo += calcularPeriodos(p).work - jornada;
+        } else {
+          saldo -= jornada;
+        }
+        diasUteis++;
+      }
+
+      const cls = saldo > 0 ? 'text-emerald-400' : saldo < 0 ? 'text-rose-400' : 'text-slate-300';
+      if (els.saldoAcumulado) {
+        els.saldoAcumulado.textContent = formatSaldo(saldo);
+        els.saldoAcumulado.className = 'text-xl font-bold ' + cls;
+      }
+      if (els.saldoAcumuladoLabel) {
+        const p = currentDate.split('-');
+        els.saldoAcumuladoLabel.textContent = `Acumulado até ${p[2]}/${p[1]}`;
+      }
+      if (els.saldoAcumuladoDias) {
+        els.saldoAcumuladoDias.textContent =
+          diasUteis === 0 ? 'sem dias úteis' : `${diasUteis} dia${diasUteis === 1 ? ' útil' : 's úteis'}`;
+      }
+    } catch (e) {
+      logError('loadSaldoAcumulado', e);
     }
   }
 
