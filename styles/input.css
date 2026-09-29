@@ -102,3 +102,21 @@ input[type='time']:focus {
 .pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+@media (min-width: 960px) {
+  .day-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 1rem;
+    align-items: start;
+  }
+  .day-layout > * {
+    margin-top: 0;
+  }
+  .day-summary {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    position: sticky;
+    top: 0;
+  }
+}
