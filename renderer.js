@@ -294,6 +294,17 @@
     return day >= 1 && day <= 5;
   }
 
+  async function feriadosDoMes(ym) {
+    if (!api || !api.listFeriadosMes) return new Set();
+    try {
+      const lista = await api.listFeriadosMes(ym);
+      return new Set(lista.map((f) => f.data));
+    } catch (e) {
+      logError('feriadosDoMes', e);
+      return new Set();
+    }
+  }
+
   function isCurrentMonthYM(ym) {
     const now = new Date();
     const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -314,6 +325,7 @@
 
       const porData = {};
       for (const p of pontos) porData[p.data] = p;
+      const feriados = await feriadosDoMes(ym);
 
       let totalWork = 0;
       let totalAlmoco = 0;
@@ -332,8 +344,8 @@
       }
 
       for (let d = new Date(primeiro.getTime()); d <= ultimoDt; d.setDate(d.getDate() + 1)) {
-        if (!dateIsWeekday(toLocalDateStr(d))) continue;
         const ds = toLocalDateStr(d);
+        if (!dateIsWeekday(ds) || feriados.has(ds)) continue;
         const p = porData[ds];
 
         if (p) {
@@ -434,7 +446,7 @@
   }
 
   async function loadSaldoAcumulado() {
-    if (!api || !api.getAllPontosMes || !api.getFeriado) return;
+    if (!api || !api.getAllPontosMes || !api.listFeriadosMes) return;
     try {
       const alvo = new Date(currentDate + 'T12:00:00');
       const ym = currentDate.slice(0, 7);
@@ -454,11 +466,7 @@
         datas.push(ds);
       }
 
-      const feriados = await Promise.all(datas.map((ds) => api.getFeriado(ds)));
-      const feriadoSet = new Set();
-      feriados.forEach((f, i) => {
-        if (f) feriadoSet.add(datas[i]);
-      });
+      const feriadoSet = await feriadosDoMes(ym);
 
       const porData = {};
       if (datas.length > 0) {
@@ -717,9 +725,10 @@
       }
 
       const aEnviar = [];
+      const feriados = await feriadosDoMes(ym);
       for (let d = new Date(primeiro.getTime()); d <= ultimoDt; d.setDate(d.getDate() + 1)) {
-        if (!dateIsWeekday(toLocalDateStr(d))) continue;
         const ds = toLocalDateStr(d);
+        if (!dateIsWeekday(ds) || feriados.has(ds)) continue;
         const p = porData[ds];
         const entrada = p ? p.entrada : '';
         const saidaA = p ? p.saida_almoco : '';

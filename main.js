@@ -31,26 +31,56 @@ function StartApp() {
     { mes: 12, dia: 25, nome: 'Natal' },
   ];
 
+  function pascoa(ano) {
+    const a = ano % 19;
+    const b = Math.floor(ano / 100);
+    const c = ano % 100;
+    const d = Math.floor(b / 4);
+    const e = b % 4;
+    const f = Math.floor((b + 8) / 25);
+    const g = Math.floor((b - f + 1) / 3);
+    const h = (19 * a + b - d - g + 15) % 30;
+    const i = Math.floor(c / 4);
+    const k = c % 4;
+    const l = (32 + 2 * e + 2 * i - h - k) % 7;
+    const m = Math.floor((a + 11 * h + 22 * l) / 451);
+    const mes = Math.floor((h + l - 7 * m + 114) / 31);
+    const dia = ((h + l - 7 * m + 114) % 31) + 1;
+    return new Date(ano, mes - 1, dia, 12);
+  }
+
+  function feriadosMoveis(ano) {
+    const base = pascoa(ano);
+    const de = (delta, nome) => {
+      const d = new Date(base.getTime());
+      d.setDate(d.getDate() + delta);
+      return { mes: d.getMonth() + 1, dia: d.getDate(), nome };
+    };
+    return [
+      de(-48, 'Carnaval (segunda)'),
+      de(-47, 'Carnaval'),
+      de(-2, 'Sexta-feira Santa'),
+      de(60, 'Corpus Christi'),
+    ];
+  }
+
+  function feriadosDoAno(ano) {
+    return FERIADOS_FIXOS.concat(feriadosMoveis(ano));
+  }
+
   function isUtil(dataStr) {
     const d = new Date(dataStr + 'T12:00:00');
     const dayOfWeek = d.getDay();
     if (dayOfWeek === 0 || dayOfWeek === 6) return false;
-
-    const mes = d.getMonth() + 1;
-    const dia = d.getDate();
-    for (const f of FERIADOS_FIXOS) {
-      if (f.mes === mes && f.dia === dia) return false;
-    }
-
-    return true;
+    return !getFeriado(dataStr);
   }
 
   function getFeriado(dataStr) {
     const d = new Date(dataStr + 'T12:00:00');
     const mes = d.getMonth() + 1;
     const dia = d.getDate();
-    for (const f of FERIADOS_FIXOS) {
-      if (f.mes === mes && f.dia === dia) return f;
+    for (const f of feriadosDoAno(d.getFullYear())) {
+      if (f.mes === mes && f.dia === dia) return { mes, dia, nome: f.nome };
     }
     if (db) {
       const row = db.prepare('SELECT nome FROM feriados WHERE data = ?').get(dataStr);
@@ -90,11 +120,12 @@ function StartApp() {
 
     const anoAtual = new Date().getFullYear();
     const insertF = db.prepare('INSERT OR IGNORE INTO feriados (data, nome) VALUES (?, ?)');
-    const ano = String(anoAtual);
-    for (const f of FERIADOS_FIXOS) {
-      const mes = String(f.mes).padStart(2, '0');
-      const dia = String(f.dia).padStart(2, '0');
-      insertF.run(`${ano}-${mes}-${dia}`, f.nome);
+    for (const ano of [anoAtual, anoAtual + 1]) {
+      for (const f of FERIADOS_FIXOS) {
+        const mes = String(f.mes).padStart(2, '0');
+        const dia = String(f.dia).padStart(2, '0');
+        insertF.run(`${ano}-${mes}-${dia}`, f.nome);
+      }
     }
   }
 
@@ -559,6 +590,21 @@ const CLOUD_KEY = 'cloud_conn_crypt';
       return db.prepare('SELECT data, nome FROM feriados ORDER BY data ASC').all();
     });
 
+    ipcMain.handle('feriados:listByMonth', (_, anoMes) => {
+      openDatabase();
+      const [ano, mes] = String(anoMes).split('-').map(Number);
+      if (!ano || !mes) return [];
+      const mapa = new Map();
+      for (const f of feriadosDoAno(ano)) {
+        if (f.mes !== mes) continue;
+        const dia = String(f.dia).padStart(2, '0');
+        mapa.set(`${anoMes}-${dia}`, f.nome);
+      }
+      const rows = db.prepare('SELECT data, nome FROM feriados WHERE data LIKE ?').all(`${anoMes}%`);
+      for (const r of rows) mapa.set(r.data, r.nome);
+      return Array.from(mapa, ([data, nome]) => ({ data, nome }));
+    });
+
     ipcMain.handle('db:exportBackup', async () => {
       openDatabase();
       const backup = {
@@ -663,17 +709,6 @@ const CLOUD_KEY = 'cloud_conn_crypt';
   });
 
   app.whenReady().then(() => {
-    const hoje = new Date();
-    const y = hoje.getFullYear();
-    const m = String(hoje.getMonth() + 1).padStart(2, '0');
-    const d = String(hoje.getDate()).padStart(2, '0');
-    const hojeStr = `${y}-${m}-${d}`;
-
-    if (!isUtil(hojeStr)) {
-      app.quit();
-      return;
-    }
-
     setupIPC();
     showWindow();
     createTray();

@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('api', {
   getToday: () => ipcRenderer.invoke('app:getToday'),
   isUtil: (data) => ipcRenderer.invoke('app:isUtil', data),
   getFeriado: (data) => ipcRenderer.invoke('app:getFeriado', data),
+  listFeriadosMes: (anoMes) => ipcRenderer.invoke('feriados:listByMonth', anoMes),
   exportBackup: () => ipcRenderer.invoke('db:exportBackup'),
   importBackup: () => ipcRenderer.invoke('db:importBackup'),
   cloudSalvar: (connString) => ipcRenderer.invoke('cloud:salvar', connString),
