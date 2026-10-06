@@ -59,9 +59,14 @@
     btnMaximize: $('#btnMaximize'),
     iconMaximize: $('#iconMaximize'),
     btnClose: $('#btnClose'),
-    btnExportBackup: $('#btnExportBackup'),
-    btnImportBackup: $('#btnImportBackup'),
-  };
+btnExportBackup: $('#btnExportBackup'),
+  btnImportBackup: $('#btnImportBackup'),
+  configCloudConn: $('#configCloudConn'),
+  cloudStatus: $('#cloudStatus'),
+  btnCloudSalvar: $('#btnCloudSalvar'),
+  btnCloudSync: $('#btnCloudSync'),
+  btnCloudRemover: $('#btnCloudRemover'),
+};
 
   let currentDate = '';
   let todayDate = '';
@@ -201,17 +206,26 @@
   }
 
   async function saveCurrentPonto() {
+    const ponto = {
+      data: currentDate,
+      entrada: els.timeEntrada.value || null,
+      saida_almoco: els.timeSaidaAlmoco.value || null,
+      volta_almoco: els.timeVoltaAlmoco.value || null,
+      saida: els.timeSaida.value || null,
+      observacao: els.observacao.value || '',
+    };
     try {
-      await api.savePonto({
-        data: currentDate,
-        entrada: els.timeEntrada.value || null,
-        saida_almoco: els.timeSaidaAlmoco.value || null,
-        volta_almoco: els.timeVoltaAlmoco.value || null,
-        saida: els.timeSaida.value || null,
-        observacao: els.observacao.value || '',
-      });
+      await api.savePonto(ponto);
     } catch (e) {
       logError('saveCurrentPonto', e);
+    }
+    try {
+      const status = await api.cloudStatus();
+      if (status && status.configurado) {
+        await api.cloudEnviarPonto(ponto);
+      }
+    } catch (e) {
+      logError('cloudEnviarPonto', e);
     }
   }
 
@@ -509,6 +523,72 @@
     if (els.configCloseBehavior) els.configCloseBehavior.value = configSavedClose;
     configSavedAuto = readAutoFields();
     if (els.screenConfig) els.screenConfig.classList.remove('hidden');
+    atualizarStatusNuvem();
+  }
+
+  function setCloudStatus(texto, classe) {
+    if (!els.cloudStatus) return;
+    els.cloudStatus.textContent = texto;
+    els.cloudStatus.className = 'text-xs ' + (classe || 'text-slate-500');
+  }
+
+  async function atualizarStatusNuvem() {
+    if (!api || !api.cloudStatus) return;
+    try {
+      const s = await api.cloudStatus();
+      if (!s.configurado) {
+        setCloudStatus('Nao configurado', 'text-slate-500');
+      } else if (s.conectado) {
+        setCloudStatus('Conectado. Sincronizando automaticamente.', 'text-emerald-400');
+      } else {
+        setCloudStatus('Configurado, mas sem conexao: ' + (s.erro || 'erro desconhecido'), 'text-rose-400');
+      }
+    } catch {
+      setCloudStatus('Erro ao consultar o status', 'text-rose-400');
+    }
+  }
+
+  async function cloudSalvar() {
+    const conn = els.configCloudConn ? els.configCloudConn.value.trim() : '';
+    if (!conn) {
+      setCloudStatus('Cole a string de conexao primeiro.', 'text-amber-400');
+      return;
+    }
+    setCloudStatus('Conectando...', 'text-slate-400');
+    const res = await api.cloudSalvar(conn);
+    if (res.ok) {
+      if (els.configCloudConn) els.configCloudConn.value = '';
+      setCloudStatus('Conectado. Tabelas prontas.', 'text-emerald-400');
+      const sync = await api.cloudSincronizar();
+      if (sync.ok) {
+        setCloudStatus('Conectado. ' + sync.enviados + ' enviados, ' + sync.importados + ' importados.', 'text-emerald-400');
+        await loadPonto();
+        loadMonthSummary();
+      }
+    } else {
+      setCloudStatus('Falha: ' + res.erro, 'text-rose-400');
+    }
+  }
+
+  async function cloudSincronizar() {
+    setCloudStatus('Sincronizando...', 'text-slate-400');
+    const res = await api.cloudSincronizar();
+    if (res.ok) {
+      setCloudStatus(
+        'Sincronizado. ' + res.enviados + ' enviados, ' + res.importados + ' importados.',
+        'text-emerald-400'
+      );
+      await loadPonto();
+      loadMonthSummary();
+    } else {
+      setCloudStatus('Falha: ' + res.erro, 'text-rose-400');
+    }
+  }
+
+  async function cloudRemover() {
+    await api.cloudRemover();
+    if (els.configCloudConn) els.configCloudConn.value = '';
+    setCloudStatus('Nao configurado', 'text-slate-500');
   }
 
   function readAutoFields() {
@@ -849,6 +929,9 @@
 
     if (els.btnExportBackup) els.btnExportBackup.addEventListener('click', backupExportar);
     if (els.btnImportBackup) els.btnImportBackup.addEventListener('click', backupImportar);
+    if (els.btnCloudSalvar) els.btnCloudSalvar.addEventListener('click', cloudSalvar);
+    if (els.btnCloudSync) els.btnCloudSync.addEventListener('click', cloudSincronizar);
+    if (els.btnCloudRemover) els.btnCloudRemover.addEventListener('click', cloudRemover);
 
     els.btnMaximize.addEventListener('click', () => api.maximizeWindow());
     const initMaximizeIcon = async () => {
@@ -905,6 +988,32 @@
       await loadMonthSummary();
     } catch (e) {
       logError('init', e);
+    }
+
+    window.addEventListener('focus', () => {
+      syncNuvemSilencioso();
+    });
+    syncNuvemSilencioso();
+  }
+
+  let ultimaSyncNuvem = 0;
+
+  async function syncNuvemSilencioso(forcar) {
+    if (!api || !api.cloudStatus) return;
+    const agora = Date.now();
+    if (!forcar && agora - ultimaSyncNuvem < 60000) return;
+    ultimaSyncNuvem = agora;
+    try {
+      const st = await api.cloudStatus();
+      if (!st || !st.configurado) return;
+      const res = await api.cloudSincronizar();
+      if (res && res.ok && res.importados > 0) {
+        await loadPonto();
+        loadMonthSummary();
+        atualizarStatusNuvem();
+      }
+    } catch (e) {
+      logError('syncNuvemSilencioso', e);
     }
   }
 

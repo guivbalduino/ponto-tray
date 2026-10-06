@@ -18,4 +18,9 @@ contextBridge.exposeInMainWorld('api', {
   getFeriado: (data) => ipcRenderer.invoke('app:getFeriado', data),
   exportBackup: () => ipcRenderer.invoke('db:exportBackup'),
   importBackup: () => ipcRenderer.invoke('db:importBackup'),
+  cloudSalvar: (connString) => ipcRenderer.invoke('cloud:salvar', connString),
+  cloudRemover: () => ipcRenderer.invoke('cloud:remover'),
+  cloudStatus: () => ipcRenderer.invoke('cloud:status'),
+  cloudSincronizar: () => ipcRenderer.invoke('cloud:sincronizar'),
+  cloudEnviarPonto: (ponto) => ipcRenderer.invoke('cloud:enviarPonto', ponto),
 });

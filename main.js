@@ -1,11 +1,13 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const Database = require('better-sqlite3');
+const { Client } = require('pg');
 
 let mainWindow = null;
 let tray = null;
 let db = null;
+let cloudClient = null;
 
 const TRAY_ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 const DB_PATH = path.join(app.getPath('userData'), 'pontos.db');
@@ -105,6 +107,157 @@ function StartApp() {
       }
       db = null;
     }
+    closeCloud();
+  }
+
+const CLOUD_KEY = 'cloud_conn_crypt';
+
+  function getConfig(chave) {
+    openDatabase();
+    const row = db.prepare('SELECT valor FROM config WHERE chave = ?').get(chave);
+    return row ? row.valor : null;
+  }
+
+  function setConfig(chave, valor) {
+    openDatabase();
+    db.prepare('INSERT OR REPLACE INTO config (chave, valor) VALUES (?, ?)').run(chave, valor);
+  }
+
+  function cloudCriptografar(texto) {
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw new Error('Criptografia do sistema indisponivel neste Windows.');
+    }
+    return safeStorage.encryptString(texto).toString('base64');
+  }
+
+  function cloudDescriptografar(base64) {
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw new Error('Criptografia do sistema indisponivel neste Windows.');
+    }
+    return safeStorage.decryptString(Buffer.from(base64, 'base64'));
+  }
+
+  function closeCloud() {
+    if (cloudClient) {
+      try {
+        cloudClient.end();
+      } catch {
+        /* ignora */
+      }
+      cloudClient = null;
+    }
+  }
+
+  async function cloudConectar() {
+    const cript = getConfig(CLOUD_KEY);
+    if (!cript) return null;
+    const conn = cloudDescriptografar(cript);
+    if (!cloudClient || cloudClient.connectionString !== conn) {
+      closeCloud();
+      const client = new Client({
+        connectionString: conn,
+        ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 10000,
+      });
+      client.on('error', (e) => {
+        console.warn('Erro na conexao com a nuvem:', e.message);
+        closeCloud();
+      });
+      await client.connect();
+      cloudClient = client;
+    }
+    return cloudClient;
+  }
+
+  async function cloudPreparar() {
+    const client = await cloudConectar();
+    if (!client) return null;
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pontos (
+        data TEXT PRIMARY KEY,
+        entrada TEXT,
+        saida_almoco TEXT,
+        volta_almoco TEXT,
+        saida TEXT,
+        observacao TEXT DEFAULT ''
+      );
+    `);
+    return client;
+  }
+
+  async function cloudEnviarPonto(p) {
+    try {
+      const client = await cloudPreparar();
+      if (!client) return { ok: false, erro: 'nuvem nao configurada' };
+      await client.query(
+        `INSERT INTO pontos (data, entrada, saida_almoco, volta_almoco, saida, observacao)
+         VALUES ($1,$2,$3,$4,$5,$6)
+         ON CONFLICT (data) DO UPDATE SET
+           entrada = EXCLUDED.entrada,
+           saida_almoco = EXCLUDED.saida_almoco,
+           volta_almoco = EXCLUDED.volta_almoco,
+           saida = EXCLUDED.saida,
+           observacao = EXCLUDED.observacao`,
+        [p.data, p.entrada || null, p.saida_almoco || null, p.volta_almoco || null, p.saida || null, p.observacao || '']
+      );
+      return { ok: true };
+    } catch (e) {
+      console.warn('Falha ao enviar ponto para a nuvem:', e.message);
+      return { ok: false, erro: e.message };
+    }
+  }
+
+  async function cloudSincronizar() {
+    try {
+      const client = await cloudPreparar();
+      if (!client) return { ok: false, erro: 'nuvem nao configurada' };
+      openDatabase();
+
+      const locais = db.prepare('SELECT * FROM pontos ORDER BY data ASC').all();
+      for (const p of locais) {
+        await client.query(
+          `INSERT INTO pontos (data, entrada, saida_almoco, volta_almoco, saida, observacao)
+           VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (data) DO UPDATE SET
+             entrada = EXCLUDED.entrada,
+             saida_almoco = EXCLUDED.saida_almoco,
+             volta_almoco = EXCLUDED.volta_almoco,
+             saida = EXCLUDED.saida,
+             observacao = EXCLUDED.observacao`,
+          [p.data, p.entrada || null, p.saida_almoco || null, p.volta_almoco || null, p.saida || null, p.observacao || '']
+        );
+      }
+
+      const remotos = await client.query(
+        'SELECT data, entrada, saida_almoco, volta_almoco, saida, observacao FROM pontos ORDER BY data ASC'
+      );
+      let importados = 0;
+      for (const p of remotos.rows) {
+        const existe = db.prepare('SELECT data FROM pontos WHERE data = ?').get(p.data);
+        if (!existe) {
+          db.prepare(
+            'INSERT INTO pontos (data, entrada, saida_almoco, volta_almoco, saida, observacao) VALUES (?, ?, ?, ?, ?, ?)'
+          ).run(p.data, p.entrada, p.saida_almoco, p.volta_almoco, p.saida, p.observacao || '');
+          importados++;
+        }
+      }
+      return { ok: true, enviados: locais.length, importados };
+    } catch (e) {
+      console.warn('Falha na sincronizacao:', e.message);
+      return { ok: false, erro: e.message };
+    }
+  }
+
+  async function cloudStatus() {
+    if (!getConfig(CLOUD_KEY)) return { configurado: false, conectado: false };
+    try {
+      const client = await cloudConectar();
+      if (!client) return { configurado: true, conectado: false };
+      await client.query('SELECT 1');
+      return { configurado: true, conectado: true };
+    } catch (e) {
+      return { configurado: true, conectado: false, erro: e.message };
+    }
   }
 
   function createWindow() {
@@ -147,7 +300,7 @@ function StartApp() {
           const row = db.prepare('SELECT valor FROM config WHERE chave = ?').get('fechar_comportamento');
           preferencia = row ? row.valor : null;
         }
-      } catch (err) {
+      } catch {
         preferencia = null;
       }
 
@@ -466,6 +619,39 @@ function StartApp() {
       })();
       return { ok: true, quantidade: (data.pontos || []).length };
     });
+
+    ipcMain.handle('cloud:salvar', async (_, connString) => {
+      try {
+        const conn = String(connString || '').trim();
+        if (!conn) return { ok: false, erro: 'Cole a string de conexao do Supabase.' };
+        if (!/^postgres(ql)?:\/\//i.test(conn)) {
+          return { ok: false, erro: 'A string deve comecar com postgresql://' };
+        }
+        setConfig(CLOUD_KEY, cloudCriptografar(conn));
+        closeCloud();
+        const status = await cloudStatus();
+        if (!status.conectado) {
+          return { ok: false, erro: status.erro || 'Nao foi possivel conectar com essa string.' };
+        }
+        await cloudPreparar();
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, erro: e.message };
+      }
+    });
+
+    ipcMain.handle('cloud:remover', async () => {
+      openDatabase();
+      db.prepare('DELETE FROM config WHERE chave = ?').run(CLOUD_KEY);
+      closeCloud();
+      return { ok: true };
+    });
+
+    ipcMain.handle('cloud:status', () => cloudStatus());
+
+    ipcMain.handle('cloud:sincronizar', () => cloudSincronizar());
+
+    ipcMain.handle('cloud:enviarPonto', (_, ponto) => cloudEnviarPonto(ponto || {}));
   }
 
   app.disableHardwareAcceleration();
