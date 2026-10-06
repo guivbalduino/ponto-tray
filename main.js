@@ -269,7 +269,9 @@ const CLOUD_KEY = 'cloud_conn_crypt';
       frame: false,
       resizable: true,
       show: false,
-      backgroundColor: '#0f172a',
+      // Matches --surface-base in styles/input.css; the old value matched no layer
+      // and showed as a flash while the window loaded.
+      backgroundColor: '#0b1220',
       icon: path.join(__dirname, 'assets', 'icon.png'),
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),

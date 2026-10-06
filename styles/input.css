@@ -4,23 +4,36 @@
 @source "../renderer.js";
 
 @theme {
-  --color-brand-50: #f0f9ff;
-  --color-brand-100: #e0f2fe;
-  --color-brand-500: #0ea5e9;
-  --color-brand-600: #0284c7;
-  --color-brand-700: #0369a1;
-  --color-brand-900: #0c4a6e;
-  --animate-pulse-soft: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  /* Accent ramp. Values are byte-identical to the sky-* tokens Tailwind v4 emitted
+     before this rename, so swapping sky-* -> brand-* is a zero-visual-change
+     cleanup that also gives the app a single named accent. */
+  --color-brand-300: oklch(82.8% 0.111 230.318);
+  --color-brand-400: oklch(74.6% 0.16 232.661);
+  --color-brand-500: oklch(68.5% 0.169 237.323);
+  --color-brand-600: oklch(58.8% 0.158 241.966);
+}
 
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.7;
-    }
-  }
+/* Surfaces and hairlines are plain custom properties, not @theme tokens: @theme
+   variables are tree-shaken when unused, and these are only ever read from the
+   component classes below. The accent ramp above is the one that needs utilities. */
+:root {
+  /* One explicit layer scale. Previously the body used Tailwind v4's slate-900
+     (#1c2537) while .card hard-coded a v3-era #1e293b, so cards were invisible
+     against the window background -- that was the "flat" look. */
+  --surface-base: #0b1220;
+  --surface-bar: #0e1626;
+  --surface-card: #16202f;
+  --surface-inset: #111a28;
+
+  --line: rgb(148 163 184 / 0.13);
+  --line-strong: rgb(148 163 184 / 0.24);
+
+  --glow-top: radial-gradient(130% 70% at 50% -12%, rgb(2 132 199 / 0.12), transparent 58%);
+  --sheen: linear-gradient(180deg, rgb(255 255 255 / 0.04), rgb(255 255 255 / 0) 60%);
+
+  /* Makes native popups (select lists, date/time pickers, scrollbars) render dark
+     instead of the OS default white. */
+  color-scheme: dark;
 }
 
 * {
@@ -29,13 +42,18 @@
     system-ui,
     -apple-system,
     sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
 body {
   -webkit-app-region: no-drag;
   user-select: text;
   height: 100vh;
   overflow: hidden;
+  background-color: var(--surface-base);
+  background-image: var(--glow-top);
 }
+
 #appRoot {
   height: 100vh;
   display: flex;
@@ -43,6 +61,7 @@ body {
   overflow: hidden;
   position: relative;
 }
+
 input,
 button,
 select {
@@ -54,53 +73,237 @@ select {
 #titleBar button {
   -webkit-app-region: no-drag;
 }
-input[type='time']::-webkit-calendar-picker-indicator {
-  filter: invert(1);
+
+/* Unlayered so it still wins against the `outline-none` utility left on some
+   inputs in index.html: no outline until focus, ring on keyboard focus. */
+:where(button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-400);
+  outline-offset: 2px;
 }
-.btn-action {
-  transition: all 0.2s ease;
-}
-.btn-action:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-}
-.btn-action:active:not(:disabled) {
-  transform: translateY(0);
-}
-.btn-action:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  transform: none;
-}
+
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #1e293b;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #475569;
-  border-radius: 3px;
+  background: rgb(148 163 184 / 0.2);
+  border-radius: 999px;
 }
-.card {
-  background: rgba(30, 41, 59, 0.95);
-  border: 1px solid rgba(71, 85, 105, 0.4);
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184 / 0.34);
 }
-input[type='time'] {
-  background: transparent;
-  color: #f1f5f9;
-  font-size: 1.5rem;
-  font-weight: 700;
-  text-align: center;
-  border: none;
-  outline: none;
-  width: 100%;
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
-input[type='time']:focus {
-  color: #38bdf8;
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
-.pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+@layer components {
+  .pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Digital values jitter when digits are proportional; these update live. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  /* Micro label, ~12 call sites across index.html and renderer.js. */
+  .label {
+    font-size: 0.625rem;
+    line-height: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-slate-500);
+  }
+
+  .section-title {
+    font-size: 0.75rem;
+    line-height: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-slate-400);
+  }
+
+  /* Radius stays on the HTML (rounded-xl) so there is one source of truth. */
+  .card {
+    background-color: var(--surface-card);
+    background-image: var(--sheen);
+    border: 1px solid var(--line);
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.3),
+      0 8px 24px -16px rgb(0 0 0 / 0.6);
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease;
+  }
+  .card:hover {
+    border-color: var(--line-strong);
+    box-shadow:
+      0 2px 4px rgb(0 0 0 / 0.32),
+      0 12px 28px -16px rgb(0 0 0 / 0.6);
+  }
+
+  /* Title bar for the main window and both overlay screens. */
+  .titlebar {
+    background-color: var(--surface-bar);
+    background-image: var(--sheen);
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* Full-screen overlay background, matched to the window base. */
+  .screen {
+    background-color: var(--surface-base);
+    background-image: var(--glow-top);
+  }
+
+  /* Inset block inside a card: darker than the card so it reads as recessed. */
+  .stat {
+    background-color: var(--surface-inset);
+    background-image: var(--sheen);
+    border: 1px solid var(--line);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  /* The day summary is the primary read on this screen; flag it with an accent edge. */
+  .day-summary {
+    border-top-color: color-mix(in oklab, var(--color-brand-500) 45%, transparent);
+  }
+
+  /* Size is deliberately unchanged from the old w-2 h-2 so filling a slot in does
+     not shift the card layout; only the ring/glow is new. */
+  .status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    flex: none;
+    border-radius: 9999px;
+    background-color: rgb(148 163 184 / 0.22);
+    transition:
+      background-color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+  .status-dot.is-on {
+    background-color: var(--color-emerald-400);
+    box-shadow: 0 0 0 3px rgb(52 211 153 / 0.16);
+  }
+
+  /* Shared column template for the month table header and its rows, so the Trab /
+     Alm / Saldo headers stay locked to the values below them at any width. */
+  .mes-row {
+    display: grid;
+    grid-template-columns: 4.5rem 9rem 2.25rem 2.25rem 2.75rem auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    transition: background-color 0.15s ease;
+  }
+  .mes-row:nth-child(even) {
+    background-color: rgb(148 163 184 / 0.04);
+  }
+  .mes-row:hover {
+    background-color: rgb(148 163 184 / 0.08);
+  }
+  /* Each row is its own grid, and grid items default to min-width:auto. Without
+     this, a row carrying a "pendente" badge or an ellipsised cell inflates its
+     first track and drifts out of alignment with the other rows. */
+  .mes-row > * {
+    min-width: 0;
+  }
+
+  /* Base look for config/select fields. Per-instance utilities (w-full, text-xs,
+     px-3, text-brand-300, font-mono) override anything set here. */
+  .field {
+    background-color: color-mix(in oklab, var(--color-slate-800) 60%, transparent);
+    border: 1px solid var(--color-slate-700);
+    border-radius: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    color: var(--color-slate-200);
+    transition:
+      border-color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .field:hover {
+    border-color: var(--color-slate-600);
+  }
+
+  /* Kept in the components layer (rather than unlayered) so the text-sm / text-lg /
+     bg-slate-800/60 utilities on the config inputs actually take effect. */
+  input[type='time'] {
+    background-color: transparent;
+    color: var(--color-slate-100);
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    border: 1px solid transparent;
+    border-radius: 0.5rem;
+    width: 100%;
+    cursor: pointer;
+  }
+  input[type='time']:hover {
+    border-color: var(--line);
+  }
+  input[type='time']:focus {
+    color: var(--color-brand-300);
+  }
+
+  /* Both pickers are native; styling the indicator is cheaper than replacing the
+     widget and keeps the click-to-open affordance. */
+  input[type='time']::-webkit-calendar-picker-indicator,
+  input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    opacity: 0.45;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+  input[type='time']::-webkit-calendar-picker-indicator:hover,
+  input[type='date']::-webkit-calendar-picker-indicator:hover {
+    opacity: 0.9;
+  }
+
+  .btn-action {
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .btn-action:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px -6px rgb(0 0 0 / 0.55);
+  }
+  .btn-action:active:not(:disabled) {
+    transform: translateY(0) scale(0.985);
+    box-shadow: none;
+  }
+  .btn-action:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
 }
 
 @media (min-width: 960px) {

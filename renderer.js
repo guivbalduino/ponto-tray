@@ -59,14 +59,14 @@
     btnMaximize: $('#btnMaximize'),
     iconMaximize: $('#iconMaximize'),
     btnClose: $('#btnClose'),
-btnExportBackup: $('#btnExportBackup'),
-  btnImportBackup: $('#btnImportBackup'),
-  configCloudConn: $('#configCloudConn'),
-  cloudStatus: $('#cloudStatus'),
-  btnCloudSalvar: $('#btnCloudSalvar'),
-  btnCloudSync: $('#btnCloudSync'),
-  btnCloudRemover: $('#btnCloudRemover'),
-};
+    btnExportBackup: $('#btnExportBackup'),
+    btnImportBackup: $('#btnImportBackup'),
+    configCloudConn: $('#configCloudConn'),
+    cloudStatus: $('#cloudStatus'),
+    btnCloudSalvar: $('#btnCloudSalvar'),
+    btnCloudSync: $('#btnCloudSync'),
+    btnCloudRemover: $('#btnCloudRemover'),
+  };
 
   let currentDate = '';
   let todayDate = '';
@@ -157,14 +157,13 @@ btnExportBackup: $('#btnExportBackup'),
   }
 
   function setStatus(el, filled) {
-    el.className = filled ? 'w-2 h-2 rounded-full bg-emerald-400' : 'w-2 h-2 rounded-full bg-slate-600';
+    el.className = filled ? 'status-dot is-on' : 'status-dot';
   }
 
   function setButtonState(btn, timeInput, filled) {
     if (filled) {
       btn.disabled = true;
       btn.textContent = 'Registrado';
-      btn.classList.add('opacity-50');
     } else {
       btn.disabled = false;
       const labels = {
@@ -174,7 +173,6 @@ btnExportBackup: $('#btnExportBackup'),
         btnSaida: 'Bater Saída',
       };
       btn.textContent = labels[btn.id] || btn.textContent;
-      btn.classList.remove('opacity-50');
     }
   }
 
@@ -245,10 +243,10 @@ btnExportBackup: $('#btnExportBackup'),
 
     if (saldo >= 0) {
       els.saldoExcedente.textContent = formatSaldo(saldo);
-      els.saldoExcedente.className = 'text-xl font-bold text-emerald-400';
+      els.saldoExcedente.className = 'tnum text-xl font-bold text-emerald-400';
     } else {
       els.saldoExcedente.textContent = formatSaldo(saldo);
-      els.saldoExcedente.className = 'text-xl font-bold text-rose-400';
+      els.saldoExcedente.className = 'tnum text-xl font-bold text-rose-400';
     }
 
     if (els.timeEntrada.value && els.timeSaidaAlmoco.value) {
@@ -380,13 +378,13 @@ btnExportBackup: $('#btnExportBackup'),
       if (els.mesAlmoco) els.mesAlmoco.textContent = minutesToPlainHM(totalAlmoco);
       if (els.mesSaldo) {
         els.mesSaldo.textContent = saldoSigned;
-        els.mesSaldo.className = 'text-2xl font-bold ' + saldoClass;
+        els.mesSaldo.className = 'tnum text-2xl font-bold ' + saldoClass;
       }
 
       if (els.mesHorasStrip) els.mesHorasStrip.textContent = horasLabel;
       if (els.mesSaldoStrip) {
         els.mesSaldoStrip.textContent = saldoSigned;
-        els.mesSaldoStrip.className = 'text-sm font-bold ' + saldoClass;
+        els.mesSaldoStrip.className = 'tnum text-sm font-bold ' + saldoClass;
       }
       if (els.mesTituloStrip && els.mesSelect) {
         const opt = els.mesSelect.selectedOptions[0];
@@ -408,20 +406,18 @@ btnExportBackup: $('#btnExportBackup'),
                 r.tipo === 'pendente' ? '<span class="text-[9px] text-slate-600 uppercase">pendente</span>' : '';
               const botao =
                 r.tipo === 'pendente'
-                  ? `<button class="btnAutoDia text-[10px] px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white" data-dia="${r.data}" title="Preencher este dia">Auto</button>`
+                  ? `<button class="btnAutoDia justify-self-end text-[10px] px-1.5 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-600 text-white" data-dia="${r.data}" title="Preencher este dia">Auto</button>`
                   : '';
               const h = r.h;
               const apont = `${h.entrada || '--'} · ${h.saida_almoco || '--'} · ${h.volta_almoco || '--'} · ${h.saida || '--'}`;
-              return `<div class="flex items-center justify-between text-sm ${r.tipo === 'pendente' ? 'opacity-70' : ''}">
-              <span class="text-slate-300">${short} ${marca}</span>
-              <div class="flex items-center gap-3">
-                <span class="text-slate-500 text-xs w-40 text-center" title="${apont}">${apont}</span>
-                <span class="text-slate-400 w-9 text-right">${minutesToPlainHM(r.work)}</span>
-                <span class="text-slate-500 w-9 text-right">${minutesToPlainHM(r.almoco)}</span>
-                <span class="${color} w-11 text-right font-semibold">${sLabel}</span>
+              return `<div class="mes-row text-sm ${r.tipo === 'pendente' ? 'opacity-60' : ''}">
+                <span class="text-slate-300 truncate">${short} ${marca}</span>
+                <span class="text-slate-500 text-xs text-center tabular-nums truncate" title="${apont}">${apont}</span>
+                <span class="text-slate-400 text-right tabular-nums">${minutesToPlainHM(r.work)}</span>
+                <span class="text-slate-500 text-right tabular-nums">${minutesToPlainHM(r.almoco)}</span>
+                <span class="${color} text-right font-semibold tabular-nums">${sLabel}</span>
                 ${botao}
-              </div>
-            </div>`;
+              </div>`;
             })
             .join('');
         }
@@ -490,7 +486,7 @@ btnExportBackup: $('#btnExportBackup'),
       const cls = saldo > 0 ? 'text-emerald-400' : saldo < 0 ? 'text-rose-400' : 'text-slate-300';
       if (els.saldoAcumulado) {
         els.saldoAcumulado.textContent = formatSaldo(saldo);
-        els.saldoAcumulado.className = 'text-xl font-bold ' + cls;
+        els.saldoAcumulado.className = 'tnum text-xl font-bold ' + cls;
       }
       if (els.saldoAcumuladoLabel) {
         const p = currentDate.split('-');
@@ -561,7 +557,10 @@ btnExportBackup: $('#btnExportBackup'),
       setCloudStatus('Conectado. Tabelas prontas.', 'text-emerald-400');
       const sync = await api.cloudSincronizar();
       if (sync.ok) {
-        setCloudStatus('Conectado. ' + sync.enviados + ' enviados, ' + sync.importados + ' importados.', 'text-emerald-400');
+        setCloudStatus(
+          'Conectado. ' + sync.enviados + ' enviados, ' + sync.importados + ' importados.',
+          'text-emerald-400',
+        );
         await loadPonto();
         loadMonthSummary();
       }
@@ -576,7 +575,7 @@ btnExportBackup: $('#btnExportBackup'),
     if (res.ok) {
       setCloudStatus(
         'Sincronizado. ' + res.enviados + ' enviados, ' + res.importados + ' importados.',
-        'text-emerald-400'
+        'text-emerald-400',
       );
       await loadPonto();
       loadMonthSummary();
