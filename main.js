@@ -56,16 +56,36 @@ function StartApp() {
       d.setDate(d.getDate() + delta);
       return { mes: d.getMonth() + 1, dia: d.getDate(), nome };
     };
-    return [
-      de(-48, 'Carnaval (segunda)'),
-      de(-47, 'Carnaval'),
-      de(-2, 'Sexta-feira Santa'),
-      de(60, 'Corpus Christi'),
-    ];
+    return [de(-48, 'Carnaval (segunda)'), de(-47, 'Carnaval'), de(-2, 'Sexta-feira Santa'), de(60, 'Corpus Christi')];
   }
 
   function feriadosDoAno(ano) {
     return FERIADOS_FIXOS.concat(feriadosMoveis(ano));
+  }
+
+  function feriadoNacional(mes, dia, ano) {
+    for (const f of feriadosDoAno(ano)) {
+      if (f.mes === mes && f.dia === dia) return f;
+    }
+    return null;
+  }
+
+  function ehFeriadoNacional(dataStr) {
+    const d = new Date(dataStr + 'T12:00:00');
+    if (Number.isNaN(d.getTime())) return false;
+    return !!feriadoNacional(d.getMonth() + 1, d.getDate(), d.getFullYear());
+  }
+
+  function feriadosRecorrentes() {
+    const mapa = new Map();
+    if (!db) return mapa;
+    try {
+      const rows = db.prepare('SELECT mes, dia, nome FROM feriados_recorrentes').all();
+      for (const r of rows) mapa.set(`${r.mes}-${r.dia}`, r.nome);
+    } catch (e) {
+      console.warn('Falha ao ler feriados recorrentes:', e);
+    }
+    return mapa;
   }
 
   function isUtil(dataStr) {
@@ -77,14 +97,18 @@ function StartApp() {
 
   function getFeriado(dataStr) {
     const d = new Date(dataStr + 'T12:00:00');
+    if (Number.isNaN(d.getTime())) return null;
     const mes = d.getMonth() + 1;
     const dia = d.getDate();
-    for (const f of feriadosDoAno(d.getFullYear())) {
-      if (f.mes === mes && f.dia === dia) return { mes, dia, nome: f.nome };
-    }
+    const nacional = feriadoNacional(mes, dia, d.getFullYear());
+    if (nacional) return { mes, dia, nome: nacional.nome, tipo: 'nacional' };
     if (db) {
-      const row = db.prepare('SELECT nome FROM feriados WHERE data = ?').get(dataStr);
-      if (row) return { mes, dia, nome: row.nome };
+      const unico = db.prepare('SELECT nome FROM feriados WHERE data = ?').get(dataStr);
+      if (unico) return { mes, dia, nome: unico.nome, tipo: 'unico' };
+      const rec = db
+        .prepare('SELECT nome FROM feriados_recorrentes WHERE mes = ? AND dia = ?')
+        .get(String(mes).padStart(2, '0'), String(dia).padStart(2, '0'));
+      if (rec) return { mes, dia, nome: rec.nome, tipo: 'recorrente' };
     }
     return null;
   }
@@ -111,6 +135,12 @@ function StartApp() {
       data TEXT PRIMARY KEY NOT NULL,
       nome TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS feriados_recorrentes (
+      mes TEXT NOT NULL,
+      dia TEXT NOT NULL,
+      nome TEXT NOT NULL,
+      PRIMARY KEY (mes, dia)
+    );
   `);
 
     const existing = db.prepare('SELECT valor FROM config WHERE chave = ?').get('jornada_diaria');
@@ -118,14 +148,27 @@ function StartApp() {
       db.prepare('INSERT INTO config (chave, valor) VALUES (?, ?)').run('jornada_diaria', '08:00');
     }
 
-    const anoAtual = new Date().getFullYear();
-    const insertF = db.prepare('INSERT OR IGNORE INTO feriados (data, nome) VALUES (?, ?)');
-    for (const ano of [anoAtual, anoAtual + 1]) {
-      for (const f of FERIADOS_FIXOS) {
-        const mes = String(f.mes).padStart(2, '0');
-        const dia = String(f.dia).padStart(2, '0');
-        insertF.run(`${ano}-${mes}-${dia}`, f.nome);
+    limparFeriadosNacionais();
+  }
+
+  function limparFeriadosNacionais() {
+    if (!db) return;
+    try {
+      const rows = db.prepare('SELECT data, nome FROM feriados').all();
+      const remover = [];
+      for (const r of rows) {
+        const d = new Date(r.data + 'T12:00:00');
+        if (Number.isNaN(d.getTime())) continue;
+        const f = feriadoNacional(d.getMonth() + 1, d.getDate(), d.getFullYear());
+        if (f && f.nome === r.nome) remover.push(r.data);
       }
+      if (!remover.length) return;
+      const del = db.prepare('DELETE FROM feriados WHERE data = ?');
+      db.transaction(() => {
+        for (const data of remover) del.run(data);
+      })();
+    } catch (e) {
+      console.warn('Falha ao limpar feriados nacionais antigos:', e);
     }
   }
 
@@ -141,7 +184,7 @@ function StartApp() {
     closeCloud();
   }
 
-const CLOUD_KEY = 'cloud_conn_crypt';
+  const CLOUD_KEY = 'cloud_conn_crypt';
 
   function getConfig(chave) {
     openDatabase();
@@ -229,7 +272,14 @@ const CLOUD_KEY = 'cloud_conn_crypt';
            volta_almoco = EXCLUDED.volta_almoco,
            saida = EXCLUDED.saida,
            observacao = EXCLUDED.observacao`,
-        [p.data, p.entrada || null, p.saida_almoco || null, p.volta_almoco || null, p.saida || null, p.observacao || '']
+        [
+          p.data,
+          p.entrada || null,
+          p.saida_almoco || null,
+          p.volta_almoco || null,
+          p.saida || null,
+          p.observacao || '',
+        ],
       );
       return { ok: true };
     } catch (e) {
@@ -255,19 +305,26 @@ const CLOUD_KEY = 'cloud_conn_crypt';
              volta_almoco = EXCLUDED.volta_almoco,
              saida = EXCLUDED.saida,
              observacao = EXCLUDED.observacao`,
-          [p.data, p.entrada || null, p.saida_almoco || null, p.volta_almoco || null, p.saida || null, p.observacao || '']
+          [
+            p.data,
+            p.entrada || null,
+            p.saida_almoco || null,
+            p.volta_almoco || null,
+            p.saida || null,
+            p.observacao || '',
+          ],
         );
       }
 
       const remotos = await client.query(
-        'SELECT data, entrada, saida_almoco, volta_almoco, saida, observacao FROM pontos ORDER BY data ASC'
+        'SELECT data, entrada, saida_almoco, volta_almoco, saida, observacao FROM pontos ORDER BY data ASC',
       );
       let importados = 0;
       for (const p of remotos.rows) {
         const existe = db.prepare('SELECT data FROM pontos WHERE data = ?').get(p.data);
         if (!existe) {
           db.prepare(
-            'INSERT INTO pontos (data, entrada, saida_almoco, volta_almoco, saida, observacao) VALUES (?, ?, ?, ?, ?, ?)'
+            'INSERT INTO pontos (data, entrada, saida_almoco, volta_almoco, saida, observacao) VALUES (?, ?, ?, ?, ?, ?)',
           ).run(p.data, p.entrada, p.saida_almoco, p.volta_almoco, p.saida, p.observacao || '');
           importados++;
         }
@@ -585,20 +642,50 @@ const CLOUD_KEY = 'cloud_conn_crypt';
       return { ok: true };
     });
 
+    ipcMain.handle('feriados:addRecorrente', (_, { mes, dia, nome }) => {
+      openDatabase();
+      db.prepare('INSERT OR REPLACE INTO feriados_recorrentes (mes, dia, nome) VALUES (?, ?, ?)').run(mes, dia, nome);
+      return { ok: true };
+    });
+
+    ipcMain.handle('feriados:removeRecorrente', (_, { mes, dia }) => {
+      openDatabase();
+      db.prepare('DELETE FROM feriados_recorrentes WHERE mes = ? AND dia = ?').run(mes, dia);
+      return { ok: true };
+    });
+
     ipcMain.handle('feriados:list', () => {
       openDatabase();
       return db.prepare('SELECT data, nome FROM feriados ORDER BY data ASC').all();
+    });
+
+    ipcMain.handle('feriados:listAll', () => {
+      openDatabase();
+      const unicos = db
+        .prepare('SELECT data, nome FROM feriados ORDER BY data ASC')
+        .all()
+        .filter((r) => !ehFeriadoNacional(r.data));
+      const recorrentes = db.prepare('SELECT mes, dia, nome FROM feriados_recorrentes ORDER BY mes ASC, dia ASC').all();
+      return { unicos, recorrentes };
     });
 
     ipcMain.handle('feriados:listByMonth', (_, anoMes) => {
       openDatabase();
       const [ano, mes] = String(anoMes).split('-').map(Number);
       if (!ano || !mes) return [];
+      const mesStr = String(mes).padStart(2, '0');
       const mapa = new Map();
       for (const f of feriadosDoAno(ano)) {
         if (f.mes !== mes) continue;
         const dia = String(f.dia).padStart(2, '0');
         mapa.set(`${anoMes}-${dia}`, f.nome);
+      }
+      const recorrentes = feriadosRecorrentes();
+      const diasNoMes = new Date(ano, mes, 0).getDate();
+      for (let dia = 1; dia <= diasNoMes; dia++) {
+        const diaStr = String(dia).padStart(2, '0');
+        const nome = recorrentes.get(`${mesStr}-${diaStr}`);
+        if (nome) mapa.set(`${anoMes}-${diaStr}`, nome);
       }
       const rows = db.prepare('SELECT data, nome FROM feriados WHERE data LIKE ?').all(`${anoMes}%`);
       for (const r of rows) mapa.set(r.data, r.nome);
@@ -613,6 +700,10 @@ const CLOUD_KEY = 'cloud_conn_crypt';
         exportadoEm: new Date().toISOString(),
         pontos: db.prepare('SELECT * FROM pontos ORDER BY data ASC').all(),
         config: db.prepare('SELECT * FROM config').all(),
+        feriados: db.prepare('SELECT data, nome FROM feriados ORDER BY data ASC').all(),
+        feriadosRecorrentes: db
+          .prepare('SELECT mes, dia, nome FROM feriados_recorrentes ORDER BY mes ASC, dia ASC')
+          .all(),
       };
       const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
         title: 'Exportar backup',
@@ -663,6 +754,14 @@ const CLOUD_KEY = 'cloud_conn_crypt';
         }
         for (const c of data.config || []) {
           db.prepare('INSERT OR REPLACE INTO config (chave, valor) VALUES (?, ?)').run(c.chave, c.valor);
+        }
+        const insF = db.prepare('INSERT OR REPLACE INTO feriados (data, nome) VALUES (?, ?)');
+        for (const f of data.feriados || []) {
+          if (f && f.data) insF.run(f.data, f.nome || 'Feriado');
+        }
+        const insFR = db.prepare('INSERT OR REPLACE INTO feriados_recorrentes (mes, dia, nome) VALUES (?, ?, ?)');
+        for (const f of data.feriadosRecorrentes || []) {
+          if (f && f.mes && f.dia) insFR.run(f.mes, f.dia, f.nome || 'Feriado');
         }
       })();
       return { ok: true, quantidade: (data.pontos || []).length };

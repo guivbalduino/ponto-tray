@@ -66,10 +66,29 @@
     btnCloudSalvar: $('#btnCloudSalvar'),
     btnCloudSync: $('#btnCloudSync'),
     btnCloudRemover: $('#btnCloudRemover'),
+    btnFeriadoDia: $('#btnFeriadoDia'),
+    feriadoForm: $('#feriadoForm'),
+    feriadoDiaData: $('#feriadoDiaData'),
+    feriadoNome: $('#feriadoNome'),
+    feriadoRecorrente: $('#feriadoRecorrente'),
+    feriadoAviso: $('#feriadoAviso'),
+    btnFeriadoAplicar: $('#btnFeriadoAplicar'),
+    btnFeriadoRemover: $('#btnFeriadoRemover'),
+    btnFeriadoCancelar: $('#btnFeriadoCancelar'),
+    feriadoConfigNome: $('#feriadoConfigNome'),
+    feriadoConfigData: $('#feriadoConfigData'),
+    feriadoConfigRecorrente: $('#feriadoConfigRecorrente'),
+    feriadoConfigAviso: $('#feriadoConfigAviso'),
+    btnFeriadoConfigAdd: $('#btnFeriadoConfigAdd'),
+    listaFeriadosRecorrentes: $('#listaFeriadosRecorrentes'),
+    listaFeriadosUnicos: $('#listaFeriadosUnicos'),
+    countFeriadosRecorrentes: $('#countFeriadosRecorrentes'),
+    countFeriadosUnicos: $('#countFeriadosUnicos'),
   };
 
   let currentDate = '';
   let todayDate = '';
+  let currentFeriado = null;
   let configSavedJornada = '';
   let configSavedDataInicio = '';
   let configSavedClose = 'perguntar';
@@ -526,8 +545,12 @@
     if (els.configDataInicio) configSavedDataInicio = els.configDataInicio.value;
     if (els.configCloseBehavior) els.configCloseBehavior.value = configSavedClose;
     configSavedAuto = readAutoFields();
+    if (els.feriadoConfigData && !els.feriadoConfigData.value) {
+      els.feriadoConfigData.value = currentDate || todayDate;
+    }
     if (els.screenConfig) els.screenConfig.classList.remove('hidden');
     atualizarStatusNuvem();
+    renderFeriadosConfig();
   }
 
   function setCloudStatus(texto, classe) {
@@ -803,6 +826,7 @@
   }
 
   function updateDayLabel() {
+    fecharFeriadoForm();
     els.dayLabel.textContent = getDayOfWeek(currentDate);
     if (currentDate === todayDate) {
       els.dayLabel.textContent += ' (Hoje)';
@@ -813,15 +837,240 @@
   async function updateHolidayBadge() {
     try {
       const feriado = await api.getFeriado(currentDate);
+      currentFeriado = feriado || null;
       if (feriado) {
         els.holidayBadge.textContent = 'Feriado · ' + feriado.nome;
+        els.holidayBadge.title = feriado.nome;
         els.holidayBadge.classList.remove('hidden');
       } else {
         els.holidayBadge.textContent = '';
+        els.holidayBadge.title = '';
         els.holidayBadge.classList.add('hidden');
       }
+      updateBtnFeriado();
     } catch (e) {
       logError('updateHolidayBadge', e);
+    }
+  }
+
+  function updateBtnFeriado() {
+    if (!els.btnFeriadoDia) return;
+    if (currentFeriado) {
+      els.btnFeriadoDia.title = 'Editar feriado: ' + currentFeriado.nome;
+      els.btnFeriadoDia.classList.add('text-amber-300', 'border-amber-500/50');
+      els.btnFeriadoDia.classList.remove('text-slate-300');
+    } else {
+      els.btnFeriadoDia.title = 'Marcar este dia como feriado';
+      els.btnFeriadoDia.classList.remove('text-amber-300', 'border-amber-500/50');
+      els.btnFeriadoDia.classList.add('text-slate-300');
+    }
+  }
+
+  function avisarFeriado(el, texto) {
+    if (!el) return;
+    if (texto) {
+      el.textContent = texto;
+      el.classList.remove('hidden');
+    } else {
+      el.textContent = '';
+      el.classList.add('hidden');
+    }
+  }
+
+  function formatDiaMes(dataStr) {
+    const [y, m, d] = (dataStr || '').split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  async function abrirFeriadoForm() {
+    if (!els.feriadoForm) return;
+    let nome = '';
+    let recorrente = false;
+    let podeRemover = false;
+    let aviso = '';
+
+    if (currentFeriado && currentFeriado.tipo === 'nacional') {
+      nome = currentFeriado.nome;
+      aviso = 'Feriado nacional — calculado automaticamente e não pode ser alterado.';
+    } else if (currentFeriado) {
+      nome = currentFeriado.nome;
+      recorrente = currentFeriado.tipo === 'recorrente';
+      podeRemover = true;
+    }
+
+    els.feriadoForm.classList.remove('hidden');
+    if (els.feriadoDiaData) els.feriadoDiaData.textContent = formatDiaMes(currentDate);
+    if (els.feriadoNome) els.feriadoNome.value = nome;
+    if (els.feriadoRecorrente) els.feriadoRecorrente.checked = recorrente;
+    if (els.btnFeriadoRemover) els.btnFeriadoRemover.classList.toggle('hidden', !podeRemover);
+    if (els.btnFeriadoAplicar) {
+      els.btnFeriadoAplicar.disabled = currentFeriado && currentFeriado.tipo === 'nacional';
+      els.btnFeriadoAplicar.textContent = currentFeriado && currentFeriado.tipo !== 'nacional' ? 'Salvar' : 'Adicionar';
+    }
+    avisarFeriado(els.feriadoAviso, aviso);
+    if (els.feriadoNome && !aviso) els.feriadoNome.focus();
+  }
+
+  function fecharFeriadoForm() {
+    if (els.feriadoForm) els.feriadoForm.classList.add('hidden');
+    avisarFeriado(els.feriadoAviso, '');
+  }
+
+  async function salvarFeriadoDia() {
+    if (currentFeriado && currentFeriado.tipo === 'nacional') {
+      avisarFeriado(els.feriadoAviso, 'Feriado nacional — não pode ser alterado.');
+      return;
+    }
+    const nome = (els.feriadoNome ? els.feriadoNome.value : '').trim();
+    if (!nome) {
+      avisarFeriado(els.feriadoAviso, 'Informe um nome para o feriado.');
+      return;
+    }
+    const [, m, d] = currentDate.split('-');
+    try {
+      if (els.feriadoRecorrente && els.feriadoRecorrente.checked) {
+        await api.addFeriadoRecorrente({ mes: m, dia: d, nome });
+        if (currentFeriado && currentFeriado.tipo === 'unico') {
+          await api.removeFeriado(currentDate);
+        }
+      } else {
+        await api.addFeriado(currentDate, nome);
+        if (currentFeriado && currentFeriado.tipo === 'recorrente') {
+          await api.removeFeriadoRecorrente({ mes: m, dia: d });
+        }
+      }
+      fecharFeriadoForm();
+      await refreshFeriados();
+    } catch (e) {
+      logError('salvarFeriadoDia', e);
+      avisarFeriado(els.feriadoAviso, 'Erro ao salvar o feriado.');
+    }
+  }
+
+  async function removerFeriadoDia() {
+    if (!currentFeriado) return;
+    const [, m, d] = currentDate.split('-');
+    try {
+      if (currentFeriado.tipo === 'recorrente') {
+        await api.removeFeriadoRecorrente({ mes: m, dia: d });
+      } else if (currentFeriado.tipo === 'unico') {
+        await api.removeFeriado(currentDate);
+      }
+      fecharFeriadoForm();
+      await refreshFeriados();
+    } catch (e) {
+      logError('removerFeriadoDia', e);
+      avisarFeriado(els.feriadoAviso, 'Erro ao remover o feriado.');
+    }
+  }
+
+  async function refreshFeriados() {
+    await updateHolidayBadge();
+    await loadPonto();
+    if (els.screenConfig && !els.screenConfig.classList.contains('hidden')) {
+      await renderFeriadosConfig();
+    }
+  }
+
+  function criarLinhaFeriado(nome, sub) {
+    const row = document.createElement('div');
+    row.className =
+      'flex items-center justify-between gap-2 bg-slate-800/40 border border-slate-700/60 rounded-lg px-2.5 py-1.5';
+    const info = document.createElement('div');
+    info.className = 'min-w-0';
+    const nomeEl = document.createElement('div');
+    nomeEl.className = 'text-xs text-slate-200 truncate';
+    nomeEl.textContent = nome;
+    nomeEl.title = nome;
+    const subEl = document.createElement('div');
+    subEl.className = 'tnum text-[10px] text-slate-500';
+    subEl.textContent = sub;
+    info.appendChild(nomeEl);
+    info.appendChild(subEl);
+    const btn = document.createElement('button');
+    btn.className =
+      'w-6 h-6 flex-none flex items-center justify-center rounded-md text-slate-500 hover:text-white hover:bg-rose-600/80 transition';
+    btn.title = 'Remover feriado';
+    btn.innerHTML =
+      '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    row.appendChild(info);
+    row.appendChild(btn);
+    return { row, btn };
+  }
+
+  async function renderFeriadosConfig() {
+    if (!api || !api.listFeriados) return;
+    try {
+      const { unicos, recorrentes } = await api.listFeriados();
+      if (els.countFeriadosRecorrentes) els.countFeriadosRecorrentes.textContent = String(recorrentes.length);
+      if (els.countFeriadosUnicos) els.countFeriadosUnicos.textContent = String(unicos.length);
+
+      if (els.listaFeriadosRecorrentes) {
+        els.listaFeriadosRecorrentes.innerHTML = '';
+        if (!recorrentes.length) {
+          els.listaFeriadosRecorrentes.innerHTML =
+            '<div class="text-[11px] text-slate-600 py-1">Nenhum feriado recorrente.</div>';
+        }
+        for (const f of recorrentes) {
+          const { row, btn } = criarLinhaFeriado(f.nome, `${f.dia}/${f.mes} · todo ano`);
+          btn.addEventListener('click', async () => {
+            await api.removeFeriadoRecorrente({ mes: f.mes, dia: f.dia });
+            await refreshFeriados();
+          });
+          els.listaFeriadosRecorrentes.appendChild(row);
+        }
+      }
+
+      if (els.listaFeriadosUnicos) {
+        els.listaFeriadosUnicos.innerHTML = '';
+        if (!unicos.length) {
+          els.listaFeriadosUnicos.innerHTML =
+            '<div class="text-[11px] text-slate-600 py-1">Nenhuma data única cadastrada.</div>';
+        }
+        for (const f of unicos) {
+          const { row, btn } = criarLinhaFeriado(f.nome, formatDiaMes(f.data));
+          btn.addEventListener('click', async () => {
+            await api.removeFeriado(f.data);
+            await refreshFeriados();
+          });
+          els.listaFeriadosUnicos.appendChild(row);
+        }
+      }
+    } catch (e) {
+      logError('renderFeriadosConfig', e);
+    }
+  }
+
+  async function addFeriadoConfig() {
+    const nome = (els.feriadoConfigNome ? els.feriadoConfigNome.value : '').trim();
+    const data = els.feriadoConfigData ? els.feriadoConfigData.value : '';
+    if (!nome) {
+      avisarFeriado(els.feriadoConfigAviso, 'Informe um nome para o feriado.');
+      return;
+    }
+    if (!data) {
+      avisarFeriado(els.feriadoConfigAviso, 'Escolha uma data.');
+      return;
+    }
+    const [, m, d] = data.split('-');
+    try {
+      const existente = await api.getFeriado(data);
+      if (existente && existente.tipo === 'nacional') {
+        avisarFeriado(els.feriadoConfigAviso, 'Essa data já é um feriado nacional automático.');
+        return;
+      }
+      if (els.feriadoConfigRecorrente && els.feriadoConfigRecorrente.checked) {
+        await api.addFeriadoRecorrente({ mes: m, dia: d, nome });
+      } else {
+        await api.addFeriado(data, nome);
+      }
+      if (els.feriadoConfigNome) els.feriadoConfigNome.value = '';
+      if (els.feriadoConfigRecorrente) els.feriadoConfigRecorrente.checked = false;
+      avisarFeriado(els.feriadoConfigAviso, '');
+      await refreshFeriados();
+    } catch (e) {
+      logError('addFeriadoConfig', e);
+      avisarFeriado(els.feriadoConfigAviso, 'Erro ao adicionar o feriado.');
     }
   }
 
@@ -931,6 +1180,35 @@
     if (els.btnConfig) els.btnConfig.addEventListener('click', openConfigScreen);
     if (els.btnCloseConfig) els.btnCloseConfig.addEventListener('click', closeConfigScreen);
     if (els.btnSalvarConfig) els.btnSalvarConfig.addEventListener('click', saveConfigScreen);
+
+    if (els.btnFeriadoDia) {
+      els.btnFeriadoDia.addEventListener('click', () => {
+        if (!els.feriadoForm) return;
+        if (els.feriadoForm.classList.contains('hidden')) abrirFeriadoForm();
+        else fecharFeriadoForm();
+      });
+    }
+    if (els.btnFeriadoAplicar) els.btnFeriadoAplicar.addEventListener('click', salvarFeriadoDia);
+    if (els.btnFeriadoRemover) els.btnFeriadoRemover.addEventListener('click', removerFeriadoDia);
+    if (els.btnFeriadoCancelar) els.btnFeriadoCancelar.addEventListener('click', fecharFeriadoForm);
+    if (els.feriadoNome) {
+      els.feriadoNome.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          salvarFeriadoDia();
+        }
+      });
+    }
+
+    if (els.btnFeriadoConfigAdd) els.btnFeriadoConfigAdd.addEventListener('click', addFeriadoConfig);
+    if (els.feriadoConfigNome) {
+      els.feriadoConfigNome.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          addFeriadoConfig();
+        }
+      });
+    }
 
     if (els.btnAutoPreenche) els.btnAutoPreenche.addEventListener('click', autoPreencherDia);
     if (els.btnAutoPreencheMes) els.btnAutoPreencheMes.addEventListener('click', autoPreencherMes);

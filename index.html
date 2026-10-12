@@ -70,7 +70,7 @@
       </div>
 
       <!-- Date Navigator -->
-      <div class="flex items-center justify-center gap-4 py-3 px-4">
+      <div class="flex flex-wrap items-center justify-center gap-3 py-3 px-4">
         <button
           id="btnPrevDay"
           class="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-800/60 hover:bg-slate-700/80 active:bg-slate-700 border border-slate-700/70 hover:border-slate-600 transition text-slate-300 hover:text-white"
@@ -88,7 +88,7 @@
           <div id="dayLabel" class="text-xs text-slate-400 mt-0.5"></div>
           <div
             id="holidayBadge"
-            class="hidden mt-1.5 text-[10px] leading-none font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/40"
+            class="hidden max-w-full truncate mt-1.5 text-[10px] leading-none font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/40"
           ></div>
         </div>
         <button
@@ -105,6 +105,63 @@
         >
           Hoje
         </button>
+        <button
+          id="btnFeriadoDia"
+          class="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-800/60 hover:bg-slate-700/80 active:bg-slate-700 border border-slate-700/70 hover:border-slate-600 transition text-slate-300 hover:text-white"
+          title="Marcar este dia como feriado"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="3" y="4" width="18" height="17" rx="2" />
+            <line x1="3" y1="9.5" x2="21" y2="9.5" />
+            <line x1="8" y1="2" x2="8" y2="5.5" />
+            <line x1="16" y1="2" x2="16" y2="5.5" />
+            <line x1="12" y1="13" x2="12" y2="19" />
+            <line x1="9" y1="16" x2="15" y2="16" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Feriado do dia (momentâneo / recorrente) -->
+      <div id="feriadoForm" class="hidden px-4 pb-3">
+        <div class="card rounded-xl p-3 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="section-title">Feriado deste dia</span>
+            <span id="feriadoDiaData" class="tnum text-xs text-slate-400"></span>
+          </div>
+          <input
+            id="feriadoNome"
+            type="text"
+            maxlength="60"
+            placeholder="Nome do feriado (ex.: Aniversário da cidade)"
+            class="field w-full text-sm"
+            autocomplete="off"
+          />
+          <label class="flex items-center gap-2 text-xs text-slate-400">
+            <input id="feriadoRecorrente" type="checkbox" class="w-4 h-4 rounded accent-brand-500" />
+            Repetir todo ano (ignora o ano)
+          </label>
+          <p id="feriadoAviso" class="hidden text-[11px] text-amber-300/90"></p>
+          <div class="flex items-center gap-2">
+            <button
+              id="btnFeriadoAplicar"
+              class="flex-1 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 active:bg-amber-600 transition text-xs font-semibold text-white"
+            >
+              Adicionar
+            </button>
+            <button
+              id="btnFeriadoRemover"
+              class="hidden flex-1 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 active:bg-rose-600 transition text-xs font-semibold text-white"
+            >
+              Remover
+            </button>
+            <button
+              id="btnFeriadoCancelar"
+              class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 active:bg-slate-700 transition text-xs font-semibold text-slate-200"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- Month Strip (compacto, topo) -->
@@ -428,6 +485,51 @@
               <input type="date" id="configDataInicio" class="field tnum text-sm" />
             </div>
             <p class="text-xs text-slate-500">Dias úteis antes desta data não são considerados no saldo do mês.</p>
+          </div>
+          <div class="card rounded-xl p-4 space-y-3">
+            <span class="section-title">Feriados</span>
+            <p class="text-xs text-slate-500">
+              Os feriados nacionais (fixos e móveis) já entram automaticamente. Adicione aqui os feriados da sua empresa
+              ou cidade, numa data única ou repetindo todo ano.
+            </p>
+            <div class="space-y-2">
+              <input
+                id="feriadoConfigNome"
+                type="text"
+                maxlength="60"
+                placeholder="Nome do feriado"
+                class="field w-full text-sm"
+                autocomplete="off"
+              />
+              <div class="flex items-center gap-3">
+                <input id="feriadoConfigData" type="date" class="field tnum text-sm flex-1" />
+                <label class="flex items-center gap-2 text-xs text-slate-400 whitespace-nowrap">
+                  <input id="feriadoConfigRecorrente" type="checkbox" class="w-4 h-4 rounded accent-brand-500" />
+                  Todo ano
+                </label>
+              </div>
+              <button
+                id="btnFeriadoConfigAdd"
+                class="w-full py-2 rounded-lg bg-amber-600 hover:bg-amber-500 active:bg-amber-600 transition text-xs font-semibold text-white"
+              >
+                Adicionar feriado
+              </button>
+              <p id="feriadoConfigAviso" class="hidden text-[11px] text-amber-300/90"></p>
+            </div>
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="label">Recorrentes (todo ano)</span>
+                <span id="countFeriadosRecorrentes" class="tnum text-[10px] text-slate-600">0</span>
+              </div>
+              <div id="listaFeriadosRecorrentes" class="space-y-1.5"></div>
+            </div>
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="label">Datas únicas</span>
+                <span id="countFeriadosUnicos" class="tnum text-[10px] text-slate-600">0</span>
+              </div>
+              <div id="listaFeriadosUnicos" class="space-y-1.5"></div>
+            </div>
           </div>
           <div class="card rounded-xl p-4 space-y-3">
             <span class="section-title">Ao Fechar a Janela</span>
