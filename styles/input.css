@@ -106,6 +106,12 @@ select {
   }
 }
 
+@keyframes spin-sync {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -119,6 +125,12 @@ select {
 @layer components {
   .pulse {
     animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Cloud sync indicator shown next to the gear while talking to Supabase.
+     Own keyframes (not Tailwind's animate-spin) so it survives tree-shaking. */
+  .spin-sync {
+    animation: spin-sync 0.9s linear infinite;
   }
 
   /* Digital values jitter when digits are proportional; these update live. */

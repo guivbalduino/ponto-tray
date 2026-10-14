@@ -43,6 +43,7 @@
     btnCloseMes: $('#btnCloseMes'),
     screenMes: $('#screenMes'),
     btnConfig: $('#btnConfig'),
+    syncIndicator: $('#syncIndicator'),
     screenConfig: $('#screenConfig'),
     btnCloseConfig: $('#btnCloseConfig'),
     btnSalvarConfig: $('#btnSalvarConfig'),
@@ -237,10 +238,12 @@
       logError('saveCurrentPonto', e);
     }
     try {
-      const status = await api.cloudStatus();
-      if (status && status.configurado) {
-        await api.cloudEnviarPonto(ponto);
-      }
+      await comIndicadorSync(async () => {
+        const status = await api.cloudStatus();
+        if (status && status.configurado) {
+          await api.cloudEnviarPonto(ponto);
+        }
+      });
     } catch (e) {
       logError('cloudEnviarPonto', e);
     }
@@ -553,6 +556,27 @@
     renderFeriadosConfig();
   }
 
+  let sincronizacoesAtivas = 0;
+
+  function iniciarSincronizacao() {
+    sincronizacoesAtivas++;
+    if (els.syncIndicator) els.syncIndicator.classList.remove('hidden');
+  }
+
+  function finalizarSincronizacao() {
+    sincronizacoesAtivas = Math.max(0, sincronizacoesAtivas - 1);
+    if (sincronizacoesAtivas === 0 && els.syncIndicator) els.syncIndicator.classList.add('hidden');
+  }
+
+  async function comIndicadorSync(fn) {
+    iniciarSincronizacao();
+    try {
+      return await fn();
+    } finally {
+      finalizarSincronizacao();
+    }
+  }
+
   function setCloudStatus(texto, classe) {
     if (!els.cloudStatus) return;
     els.cloudStatus.textContent = texto;
@@ -582,11 +606,11 @@
       return;
     }
     setCloudStatus('Conectando...', 'text-slate-400');
-    const res = await api.cloudSalvar(conn);
+    const res = await comIndicadorSync(() => api.cloudSalvar(conn));
     if (res.ok) {
       if (els.configCloudConn) els.configCloudConn.value = '';
       setCloudStatus('Conectado. Tabelas prontas.', 'text-emerald-400');
-      const sync = await api.cloudSincronizar();
+      const sync = await comIndicadorSync(() => api.cloudSincronizar());
       if (sync.ok) {
         setCloudStatus(
           'Conectado. ' + sync.enviados + ' enviados, ' + sync.importados + ' importados.',
@@ -602,7 +626,7 @@
 
   async function cloudSincronizar() {
     setCloudStatus('Sincronizando...', 'text-slate-400');
-    const res = await api.cloudSincronizar();
+    const res = await comIndicadorSync(() => api.cloudSincronizar());
     if (res.ok) {
       setCloudStatus(
         'Sincronizado. ' + res.enviados + ' enviados, ' + res.importados + ' importados.',
@@ -1292,7 +1316,7 @@
     try {
       const st = await api.cloudStatus();
       if (!st || !st.configurado) return;
-      const res = await api.cloudSincronizar();
+      const res = await comIndicadorSync(() => api.cloudSincronizar());
       if (res && res.ok && res.importados > 0) {
         await loadPonto();
         loadMonthSummary();
