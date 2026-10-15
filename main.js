@@ -288,13 +288,23 @@ function StartApp() {
     }
   }
 
-  async function cloudSincronizar() {
+  function sendSyncPhase(phase) {
+  try {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('cloud:sync-phase', phase);
+    }
+  } catch (e) {}
+}
+
+async function cloudSincronizar() {
     try {
       const client = await cloudPreparar();
       if (!client) return { ok: false, erro: 'nuvem nao configurada' };
       openDatabase();
 
       const locais = db.prepare('SELECT * FROM pontos ORDER BY data ASC').all();
+      sendSyncPhase('upload');
       for (const p of locais) {
         await client.query(
           `INSERT INTO pontos (data, entrada, saida_almoco, volta_almoco, saida, observacao)
@@ -316,6 +326,7 @@ function StartApp() {
         );
       }
 
+      sendSyncPhase('download');
       const remotos = await client.query(
         'SELECT data, entrada, saida_almoco, volta_almoco, saida, observacao FROM pontos ORDER BY data ASC',
       );

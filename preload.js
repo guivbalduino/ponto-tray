@@ -28,5 +28,9 @@ contextBridge.exposeInMainWorld('api', {
   cloudRemover: () => ipcRenderer.invoke('cloud:remover'),
   cloudStatus: () => ipcRenderer.invoke('cloud:status'),
   cloudSincronizar: () => ipcRenderer.invoke('cloud:sincronizar'),
+  onSyncPhase: (cb) => {
+    ipcRenderer.on('cloud:sync-phase', (_, phase) => cb(phase));
+    return () => ipcRenderer.removeAllListeners('cloud:sync-phase');
+  },
   cloudEnviarPonto: (ponto) => ipcRenderer.invoke('cloud:enviarPonto', ponto),
 });

@@ -560,12 +560,23 @@
 
   function iniciarSincronizacao() {
     sincronizacoesAtivas++;
-    if (els.syncIndicator) els.syncIndicator.classList.remove('hidden');
+    if (els.syncIndicator) {
+      els.syncIndicator.classList.remove('hidden', 'text-blue-400', 'text-red-400', 'text-brand-300');
+      els.syncIndicator.classList.add('text-brand-300');
+    }
   }
 
   function finalizarSincronizacao() {
     sincronizacoesAtivas = Math.max(0, sincronizacoesAtivas - 1);
-    if (sincronizacoesAtivas === 0 && els.syncIndicator) els.syncIndicator.classList.add('hidden');
+    if (sincronizacoesAtivas === 0 && els.syncIndicator) {
+      setTimeout(() => {
+        if (sincronizacoesAtivas === 0) {
+          els.syncIndicator.classList.add('hidden');
+          els.syncIndicator.classList.remove('text-blue-400', 'text-red-400', 'text-brand-300');
+          els.syncIndicator.classList.add('text-brand-300');
+        }
+      }, 600);
+    }
   }
 
   async function comIndicadorSync(fn) {
@@ -583,6 +594,19 @@
     els.cloudStatus.className = 'text-xs ' + (classe || 'text-slate-500');
   }
 
+  if (api && api.onSyncPhase) {
+    api.onSyncPhase((phase) => {
+      if (!els.syncIndicator) return;
+      els.syncIndicator.classList.remove('text-blue-400', 'text-red-400', 'text-brand-300');
+      if (phase === 'upload') {
+        els.syncIndicator.classList.add('text-blue-400');
+      } else if (phase === 'download') {
+        els.syncIndicator.classList.add('text-red-400');
+      } else {
+        els.syncIndicator.classList.add('text-brand-300');
+      }
+    });
+  }
   async function atualizarStatusNuvem() {
     if (!api || !api.cloudStatus) return;
     try {
