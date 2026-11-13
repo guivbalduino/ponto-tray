@@ -289,15 +289,17 @@ function StartApp() {
   }
 
   function sendSyncPhase(phase) {
-  try {
-    const win = BrowserWindow.getAllWindows()[0];
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('cloud:sync-phase', phase);
+    try {
+      const win = BrowserWindow.getAllWindows()[0];
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('cloud:sync-phase', phase);
+      }
+    } catch {
+      // Janela fechada durante a sincronização: não há para quem avisar.
     }
-  } catch (e) {}
-}
+  }
 
-async function cloudSincronizar() {
+  async function cloudSincronizar() {
     try {
       const client = await cloudPreparar();
       if (!client) return { ok: false, erro: 'nuvem nao configurada' };
@@ -594,6 +596,44 @@ async function cloudSincronizar() {
       openDatabase();
       const rows = db.prepare('SELECT * FROM pontos WHERE data LIKE ? ORDER BY data ASC').all(`${anoMes}%`);
       return rows;
+    });
+
+    // Horários mais repetidos nos últimos 30 dias, por campo. Cada campo tem
+    // no máximo um valor por dia, então a contagem já é o "número de dias".
+    // `ignorar` traz os horários padrão do autocomplete: eles são preenchidos
+    // automaticamente em todo dia vazio, então não dizem nada sobre o costume
+    // real do usuário e não devem virar sugestão.
+    ipcMain.handle('db:getSugestoesHorarios', (_, ignorar) => {
+      openDatabase();
+      const padroes = ignorar && typeof ignorar === 'object' ? ignorar : {};
+      const corte = new Date();
+      corte.setDate(corte.getDate() - 30);
+      const corteStr = [
+        corte.getFullYear(),
+        String(corte.getMonth() + 1).padStart(2, '0'),
+        String(corte.getDate()).padStart(2, '0'),
+      ].join('-');
+
+      const rows = db
+        .prepare('SELECT entrada, saida_almoco, volta_almoco, saida FROM pontos WHERE data >= ?')
+        .all(corteStr);
+
+      const campos = ['entrada', 'saida_almoco', 'volta_almoco', 'saida'];
+      const sugestoes = {};
+      for (const campo of campos) {
+        const contagem = new Map();
+        for (const row of rows) {
+          const hora = row[campo];
+          if (!hora || hora === padroes[campo]) continue;
+          contagem.set(hora, (contagem.get(hora) || 0) + 1);
+        }
+        sugestoes[campo] = [...contagem.entries()]
+          .filter(([, vezes]) => vezes >= 2)
+          .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+          .slice(0, 3)
+          .map(([hora, vezes]) => ({ hora, vezes }));
+      }
+      return sugestoes;
     });
 
     ipcMain.handle('app:hide', () => {

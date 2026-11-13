@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   getConfig: (chave) => ipcRenderer.invoke('db:getConfig', chave),
   setConfig: (chave, valor) => ipcRenderer.invoke('db:setConfig', { chave, valor }),
   getAllPontosMes: (anoMes) => ipcRenderer.invoke('db:getAllPontosMes', anoMes),
+  getSugestoesHorarios: (ignorar) => ipcRenderer.invoke('db:getSugestoesHorarios', ignorar),
   hideWindow: () => ipcRenderer.invoke('app:hide'),
   minimizeWindow: () => ipcRenderer.invoke('app:minimize'),
   maximizeWindow: () => ipcRenderer.invoke('app:maximize'),

@@ -13,6 +13,10 @@
     timeSaidaAlmoco: $('#timeSaidaAlmoco'),
     timeVoltaAlmoco: $('#timeVoltaAlmoco'),
     timeSaida: $('#timeSaida'),
+    sugEntrada: $('#sugEntrada'),
+    sugSaidaAlmoco: $('#sugSaidaAlmoco'),
+    sugVoltaAlmoco: $('#sugVoltaAlmoco'),
+    sugSaida: $('#sugSaida'),
     btnEntrada: $('#btnEntrada'),
     btnSaidaAlmoco: $('#btnSaidaAlmoco'),
     btnVoltaAlmoco: $('#btnVoltaAlmoco'),
@@ -95,6 +99,15 @@
   let configSavedClose = 'perguntar';
   let configSavedAuto = { entrada: '', saida_almoco: '', volta_almoco: '', saida: '' };
   let autoPadrao = { entrada: '08:00', saida_almoco: '12:00', volta_almoco: '13:00', saida: '17:00' };
+
+  const slotsSugestao = [
+    { campo: 'entrada', input: els.timeEntrada, box: els.sugEntrada },
+    { campo: 'saida_almoco', input: els.timeSaidaAlmoco, box: els.sugSaidaAlmoco },
+    { campo: 'volta_almoco', input: els.timeVoltaAlmoco, box: els.sugVoltaAlmoco },
+    { campo: 'saida', input: els.timeSaida, box: els.sugSaida },
+  ];
+  let sugestoesHorarios = { entrada: [], saida_almoco: [], volta_almoco: [], saida: [] };
+  let sugestoesTimer = null;
 
   const DIAS_SEMANA = [
     'Domingo',
@@ -218,6 +231,7 @@
 
       calculateSummary();
       loadMonthSummary();
+      renderSugestoesHorarios();
     } catch (e) {
       logError('loadPonto', e);
     }
@@ -247,6 +261,54 @@
     } catch (e) {
       logError('cloudEnviarPonto', e);
     }
+    agendarRefreshSugestoes();
+  }
+
+  function renderSugestoesHorarios() {
+    for (const slot of slotsSugestao) {
+      if (!slot.box || !slot.input) continue;
+      const atual = slot.input.value;
+      const padrao = autoPadrao[slot.campo];
+      const itens = (sugestoesHorarios[slot.campo] || []).filter((item) => item.hora !== atual && item.hora !== padrao);
+      slot.box.textContent = '';
+      if (!itens.length) {
+        slot.box.hidden = true;
+        continue;
+      }
+      for (const item of itens) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'sug-chip';
+        chip.dataset.slot = slot.campo;
+        chip.dataset.hora = item.hora;
+        chip.title = 'Usado ' + item.vezes + 'x nos últimos 30 dias';
+        chip.textContent = item.hora;
+        const vezes = document.createElement('span');
+        vezes.className = 'sug-vezes';
+        vezes.textContent = item.vezes + 'x';
+        chip.appendChild(vezes);
+        slot.box.appendChild(chip);
+      }
+      slot.box.hidden = false;
+    }
+  }
+
+  async function loadSugestoesHorarios() {
+    if (!api || !api.getSugestoesHorarios) return;
+    try {
+      sugestoesHorarios = await api.getSugestoesHorarios(autoPadrao);
+      renderSugestoesHorarios();
+    } catch (e) {
+      logError('loadSugestoesHorarios', e);
+    }
+  }
+
+  function agendarRefreshSugestoes() {
+    clearTimeout(sugestoesTimer);
+    sugestoesTimer = setTimeout(() => {
+      sugestoesTimer = null;
+      loadSugestoesHorarios();
+    }, 1500);
   }
 
   function calculateSummary() {
@@ -716,6 +778,7 @@
       await api.setConfig('auto_saida', auto.saida);
       autoPadrao = Object.assign({}, auto);
       configSavedAuto = auto;
+      loadSugestoesHorarios();
       if (els.screenConfig) els.screenConfig.classList.add('hidden');
       loadMonthSummary();
     } catch (e) {
@@ -742,6 +805,7 @@
         alert('Backup importado com sucesso (' + res.quantidade + ' registros).');
         loadPonto();
         loadMonthSummary();
+        loadSugestoesHorarios();
       } else if (res.erro) {
         alert(res.erro);
       }
@@ -1175,6 +1239,17 @@
       calculateSummary();
     });
 
+    for (const slot of slotsSugestao) {
+      if (!slot.box) continue;
+      slot.box.addEventListener('click', (ev) => {
+        const chip = ev.target.closest('.sug-chip');
+        if (!chip || !slot.input) return;
+        slot.input.value = chip.dataset.hora;
+        slot.input.dispatchEvent(new Event('change', { bubbles: true }));
+        renderSugestoesHorarios();
+      });
+    }
+
     let obsTimer = null;
     els.observacao.addEventListener('input', () => {
       clearTimeout(obsTimer);
@@ -1320,6 +1395,7 @@
 
       await loadPonto();
       await loadMonthSummary();
+      await loadSugestoesHorarios();
     } catch (e) {
       logError('init', e);
     }
@@ -1344,6 +1420,7 @@
       if (res && res.ok && res.importados > 0) {
         await loadPonto();
         loadMonthSummary();
+        loadSugestoesHorarios();
         atualizarStatusNuvem();
       }
     } catch (e) {

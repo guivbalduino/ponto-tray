@@ -296,6 +296,59 @@ select {
     opacity: 0.9;
   }
 
+  /* Horários sugeridos (mais repetidos nos últimos 30 dias). */
+  .sugestoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  .sugestoes[hidden] {
+    display: none;
+  }
+
+  .sug-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.25rem;
+    padding: 0.0625rem 0.375rem;
+    border: 1px solid var(--line);
+    border-radius: 0.375rem;
+    background-color: color-mix(in oklab, var(--color-slate-800) 55%, transparent);
+    color: var(--color-slate-400);
+    font-size: 0.6875rem;
+    line-height: 1.25rem;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition:
+      border-color 0.15s ease,
+      color 0.15s ease,
+      background-color 0.15s ease;
+  }
+  .sug-chip:hover {
+    border-color: var(--color-brand-400);
+    color: var(--color-brand-300);
+  }
+  .sug-chip[data-slot='entrada']:hover {
+    border-color: var(--color-emerald-400);
+    color: var(--color-emerald-400);
+  }
+  .sug-chip[data-slot='saida_almoco']:hover {
+    border-color: var(--color-amber-400);
+    color: var(--color-amber-400);
+  }
+  .sug-chip[data-slot='volta_almoco']:hover {
+    border-color: var(--color-blue-400);
+    color: var(--color-blue-400);
+  }
+  .sug-chip[data-slot='saida']:hover {
+    border-color: var(--color-rose-400);
+    color: var(--color-rose-400);
+  }
+  .sug-chip .sug-vezes {
+    color: var(--color-slate-500);
+    font-size: 0.5625rem;
+  }
+
   .btn-action {
     transition:
       transform 0.15s ease,
